@@ -195,7 +195,9 @@ func (s *Select) Run() (int, string, error) {
 
 func (s *Select) innerRun(starting int, top rune) (int, string, error) {
 	stdin := readline.NewCancelableStdin(os.Stdin)
-	c := &readline.Config{}
+	c := &readline.Config{
+		FuncIsTerminal: func() bool { return false },
+	}
 	err := c.Init()
 	if err != nil {
 		return 0, "", err
@@ -218,11 +220,12 @@ func (s *Select) innerRun(starting int, top rune) (int, string, error) {
 	rl.Write([]byte(hideCursor))
 	sb := screenbuf.New(rl)
 
-	var searchInput []rune
 	canSearch := s.Searcher != nil
-	searchMode := s.StartInSearchMode
+	searchMode := false
 
 	c.SetListener(func(line []rune, pos int, key rune) ([]rune, int, bool) {
+		searchInput := line
+		reset := false
 		switch {
 		case key == KeyEnter:
 			return nil, 0, true
@@ -230,37 +233,33 @@ func (s *Select) innerRun(starting int, top rune) (int, string, error) {
 			s.list.Next()
 		case key == s.Keys.Prev.Code || (key == 'k' && !searchMode):
 			s.list.Prev()
-		case key == s.Keys.Search.Code:
+		case key == keyEsc:
 			if !canSearch {
 				break
 			}
-
 			if searchMode {
 				searchMode = false
-				searchInput = nil
-				s.list.CancelSearch()
-			} else {
-				searchMode = true
-			}
-		case key == KeyBackspace:
-			if !canSearch || !searchMode {
-				break
-			}
-
-			if len(searchInput) > 1 {
-				searchInput = searchInput[:len(searchInput)-1]
-				s.list.Search(string(searchInput))
-			} else {
-				searchInput = nil
+				reset = true
 				s.list.CancelSearch()
 			}
 		case key == s.Keys.PageUp.Code || (key == 'h' && !searchMode):
 			s.list.PageUp()
 		case key == s.Keys.PageDown.Code || (key == 'l' && !searchMode):
 			s.list.PageDown()
+		case key == s.Keys.Search.Code:
+			if !canSearch {
+				break
+			}
+
+			if !searchMode {
+				reset = true
+				searchMode = true
+				searchInput = []rune{}
+				break
+			}
+			fallthrough
 		default:
 			if canSearch && searchMode {
-				searchInput = append(searchInput, line...)
 				s.list.Search(string(searchInput))
 			}
 		}
@@ -319,8 +318,10 @@ func (s *Select) innerRun(starting int, top rune) (int, string, error) {
 		}
 
 		sb.Flush()
-
-		return nil, 0, true
+		if reset {
+			return nil, 0, true
+		}
+		return line, pos, false
 	})
 
 	for {

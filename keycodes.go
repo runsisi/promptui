@@ -9,6 +9,7 @@ import "github.com/chzyer/readline"
 var (
 	// KeyEnter is the default key for submission/selection.
 	KeyEnter rune = readline.CharEnter
+	keyEsc rune = readline.CharEsc
 
 	// KeyBackspace is the default key for deleting input text.
 	KeyBackspace rune = readline.CharBackspace
